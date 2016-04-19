@@ -1,4 +1,4 @@
-/* ********************************************************************* 
+/* *********************************************************************
                   _____         _               _
                  |_   _|____  _| |_ _   _  __ _| |
                    | |/ _ \ \/ / __| | | |/ _` | |
@@ -18,8 +18,8 @@
     * Redistributions in binary form must reproduce the above copyright
       notice, this list of conditions and the following disclaimer in the
       documentation and/or other materials provided with the distribution.
-    * Neither the name of Textual and/or "Codeux Software, LLC", nor the 
-      names of its contributors may be used to endorse or promote products 
+    * Neither the name of Textual and/or "Codeux Software, LLC", nor the
+      names of its contributors may be used to endorse or promote products
       derived from this software without specific prior written permission.
 
  THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
@@ -58,7 +58,7 @@
 	if ((self = [super init])) {
 		self.lastWeightFade = CFAbsoluteTimeGetCurrent();
 	}
-	
+
 	return self;
 }
 
@@ -67,7 +67,7 @@
 	if ((self = [super init])) {
 		[self migrate:otherUser];
 	}
-	
+
 	return self;
 }
 
@@ -78,7 +78,7 @@
 	[newUser setSupportInfo:[client supportInfo]];
 
 	[newUser setNickname:nickname];
-	
+
 	return newUser;
 }
 
@@ -117,7 +117,7 @@
 	NSObjectIsEmptyAssertReturn(self.nickname, nil);
 	NSObjectIsEmptyAssertReturn(self.username, nil);
 	NSObjectIsEmptyAssertReturn(self.address, nil);
-	
+
 	return [NSString stringWithFormat:@"%@!%@@%@", self.nickname, self.username, self.address];
 }
 
@@ -137,7 +137,7 @@
 		case TXHostmaskBanWHANNIFormat: {	return [NSString stringWithFormat:@"%@!*%@", self.nickname, self.address];						}
 		case TXHostmaskBanExactFormat: {	return [NSString stringWithFormat:@"%@!%@@%@", self.nickname, self.username, self.address];		}
 	}
-	
+
 	return nil;
 }
 
@@ -192,7 +192,7 @@
 	}
 }
 
-- (BOOL)isHalfOp 
+- (BOOL)isHalfOp
 {
 	if (NSObjectIsEmpty(self.modes)) {
 		return NO;
@@ -360,7 +360,7 @@
 	if (local > remote) {
 		return NSOrderedAscending;
 	}
-	
+
 	if (local < remote) {
 		return NSOrderedDescending;
 	}
@@ -381,7 +381,9 @@
 
 		NSComparisonResult invertedRank = NSInvertedComparisonResult(normalRank);
 
-		BOOL favorIRCop = [TPCPreferences memberListSortFavorsServerStaff];
+		// Ignore IRC Operator status when ordering list.
+		// This will slow the custom color without changing the order.
+		BOOL favorIRCop = NO;//[TPCPreferences memberListSortFavorsServerStaff];
 
 		if (favorIRCop && [self isCop] && [other isCop] == NO) {
 			return NSOrderedAscending;
@@ -406,7 +408,7 @@
 - (void)migrate:(IRCUser *)from
 {
 	self.supportInfo = [from supportInfo];
-	
+
 	self.nickname = [from nickname];
 	self.username = [from username];
 	self.address = [from address];
@@ -432,7 +434,7 @@
 @end
 
 #pragma mark -
-#pragma mark Nickname Color Style Generator 
+#pragma mark Nickname Color Style Generator
 
 @implementation IRCUserNicknameColorStyleGenerator
 
@@ -601,7 +603,7 @@
 	}
 }
 
-/* 
+/*
  *   Color override storage talks in NSColor instead of hexadecimal strings for a few reasons:
  *    1. Easier to work with when modifying. No need to perform messy string conversion.
  *    2. Easier to change output format in another update (if that decision is made)
