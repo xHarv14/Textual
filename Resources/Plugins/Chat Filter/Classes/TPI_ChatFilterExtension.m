@@ -327,6 +327,9 @@
 						fakeMessageCommand = @"NOTICE";
 					}
 
+					// Override to always display a NOTICE:
+					lineType = TVCLogLineNoticeType;
+
 					[client printToWebView:destinationChannel
 									  type:lineType
 								   command:fakeMessageCommand
