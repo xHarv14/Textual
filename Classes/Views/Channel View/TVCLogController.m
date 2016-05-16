@@ -40,6 +40,12 @@
 
 #import "THOPluginProtocolPrivate.h"
 
+#define _enqueueBlock(operationBlock)			\
+	[[self printingQueue] enqueueMessageBlock:(operationBlock) for:self description:NSStringFromSelector(_cmd) isStandalone:NO];
+
+#define _enqueueBlockStandalone(operationBlock)			\
+	[[self printingQueue] enqueueMessageBlock:(operationBlock) for:self description:NSStringFromSelector(_cmd) isStandalone:YES];
+
 @interface TVCLogController ()
 @property (nonatomic, assign) BOOL isTerminating;
 @property (nonatomic, assign) BOOL historyLoaded;
@@ -323,14 +329,12 @@ NSString * const TVCLogControllerViewFinishedLoadingNotification = @"TVCLogContr
 
 	if (onQueue) {
 		TVCLogControllerOperationBlock scriptBlock = ^(id operation) {
-			NSAssertReturn([operation isCancelled] == NO);
-			
 			[self performBlockOnMainThread:^{
 				[self _evaluateFunction:function withArguments:arguments];
 			}];
 		};
-		
-		[[self printingQueue] enqueueMessageBlock:scriptBlock for:self];
+
+		_enqueueBlock(scriptBlock)
 	} else {
 		[self _evaluateFunction:function withArguments:arguments];
 	}
@@ -367,9 +371,7 @@ NSString * const TVCLogControllerViewFinishedLoadingNotification = @"TVCLogContr
 {
 	NSAssertReturn(self.isTerminating == NO);
 
-	[[self printingQueue] enqueueMessageBlock:^(id operation) {
-		NSAssertReturn([operation isCancelled] == NO);
-
+	TVCLogControllerOperationBlock operationBlock = ^(id operation) {
 		NSString *topicString = nil;
 
 		if (NSObjectIsEmpty(topic)) {
@@ -389,7 +391,9 @@ NSString * const TVCLogControllerViewFinishedLoadingNotification = @"TVCLogContr
 		[self performBlockOnMainThread:^{
 			[self _evaluateFunction:@"Textual.setTopicBarValue" withArguments:@[topicString, topicTemplate]];
 		}];
-	} for:self];
+	};
+
+	_enqueueBlock(operationBlock)
 }
 
 #pragma mark -
@@ -532,17 +536,15 @@ NSString * const TVCLogControllerViewFinishedLoadingNotification = @"TVCLogContr
 	{
 		self.reloadingHistory = YES;
 
-		[[self printingQueue] enqueueMessageBlock:^(id operation) {
-			if ([operation isCancelled] == NO) {
-				NSArray *objects = [self.historicLogFile listEntriesWithFetchLimit:100];
+		TVCLogControllerOperationBlock operationBlock = ^(id operation) {
+			NSArray *objects = [self.historicLogFile listEntriesWithFetchLimit:100];
 
-				[self.historicLogFile resetData];
+			[self.historicLogFile resetData];
 
-				[self reloadHistoryCompletionBlock:objects];
-			} else {
-				[self reloadHistoryCompletionBlock:nil];
-			}
-		 } for:self isStandalone:YES];
+			[self reloadHistoryCompletionBlock:objects];
+		};
+
+		_enqueueBlockStandalone(operationBlock)
 	}
 }
 
@@ -564,17 +566,15 @@ NSString * const TVCLogControllerViewFinishedLoadingNotification = @"TVCLogContr
 
 		if (self.viewIsEncrypted == NO)
 		{
-			[[self printingQueue] enqueueMessageBlock:^(id operation) {
-				if ([operation isCancelled] == NO) {
-					NSArray *objects = [self.historicLogFile listEntriesWithFetchLimit:1000];
-					
-					[self.historicLogFile resetData];
-					
-					[self reloadThemeCompletionBlock:objects];
-				} else {
-					[self reloadThemeCompletionBlock:nil];
-				}
-			} for:self isStandalone:YES];
+			TVCLogControllerOperationBlock operationBlock = ^(id operation) {
+				NSArray *objects = [self.historicLogFile listEntriesWithFetchLimit:1000];
+				
+				[self.historicLogFile resetData];
+				
+				[self reloadThemeCompletionBlock:objects];
+			};
+
+			_enqueueBlockStandalone(operationBlock)
 		}
 		else
 		{
@@ -624,7 +624,7 @@ NSString * const TVCLogControllerViewFinishedLoadingNotification = @"TVCLogContr
 
 - (void)changeTextSize:(BOOL)bigger
 {
-	float sizeMultiplier = [worldController() textSizeMultiplier];
+	double sizeMultiplier = [worldController() textSizeMultiplier];
 
 	[self _evaluateFunction:@"Textual.changeTextSizeMultiplier" withArguments:@[@(sizeMultiplier)]];
 
@@ -836,8 +836,6 @@ NSString * const TVCLogControllerViewFinishedLoadingNotification = @"TVCLogContr
 
 	/* Continue with a normal print job. */
 	TVCLogControllerOperationBlock printBlock = ^(id operation) {
-		NSAssertReturn([operation isCancelled] == NO);
-
 		/* Render everything. */
 		NSDictionary *resultInfo = nil;
 		
@@ -926,7 +924,7 @@ NSString * const TVCLogControllerViewFinishedLoadingNotification = @"TVCLogContr
 		}
 	};
 
-	[[self printingQueue] enqueueMessageBlock:printBlock for:self];
+	_enqueueBlock(printBlock)
 }
 
 - (NSString *)renderLogLine:(TVCLogLine *)line resultInfo:(NSDictionary * __autoreleasing *)resultInfo
@@ -1192,7 +1190,7 @@ NSString * const TVCLogControllerViewFinishedLoadingNotification = @"TVCLogContr
 {
 	BOOL onlyShowDuringScrolling = [TXUserInterface onlyShowScrollbarWhileScrolling];
 
-	BOOL usesCustomScrollers = ([RZUserDefaults() boolForKey:@"WebViewDoNotUsesCustomScrollers"] == NO);
+	BOOL usesCustomScrollers = [TPCPreferences themeChannelViewUsesCustomScrollers];
 
 	BOOL usingWebKit2 = [self.backingView isUsingWebKit2];
 
@@ -1253,7 +1251,7 @@ NSString * const TVCLogControllerViewFinishedLoadingNotification = @"TVCLogContr
 
 	// ---- //
 
-	NSFont *channelFont = [themeSettings() channelViewFont];
+	NSFont *channelFont = [themeSettings() themeChannelViewFont];
 
 	if (channelFont == nil) {
 		channelFont = [TPCPreferences themeChannelViewFont];
@@ -1271,7 +1269,7 @@ NSString * const TVCLogControllerViewFinishedLoadingNotification = @"TVCLogContr
 	} else {
 		templateTokens[@"nicknameIndentationAvailable"] = @(YES);
 		
-		NSString *timeFormat = [themeSettings() timestampFormat];
+		NSString *timeFormat = [themeSettings() themeTimestampFormat];
 		
 		if (timeFormat == nil) {
 			timeFormat = [TPCPreferences themeTimestampFormat];
@@ -1310,7 +1308,7 @@ NSString * const TVCLogControllerViewFinishedLoadingNotification = @"TVCLogContr
 		 NSDictionaryNilValue([self.associatedChannel name])
 	]];
 
-	float textSizeMultiplier = [worldController() textSizeMultiplier];
+	double textSizeMultiplier = [worldController() textSizeMultiplier];
 
 	[self _evaluateFunction:@"Textual.viewFinishedLoadingInt"
 					  withArguments:@[@([self isVisible]),

@@ -91,8 +91,6 @@
 #define _retryInterval				240
 #define _timeoutInterval			360
 
-#define _reconnectTimerMaximumAttempts		100
-
 enum {
 	ClientIRCv3SupportedCapacitySASLGeneric			= 1 << 9,
 	ClientIRCv3SupportedCapacitySASLPlainText		= 1 << 10, // YES if SASL=plain CAP is supported.
@@ -1365,7 +1363,7 @@ NSString * const IRCClientChannelListWasModifiedNotification = @"IRCClientChanne
 	if (ltype == TVCLogLineActionType || ltype == TVCLogLineActionNoHighlightType) {
 		desc = [NSString stringWithFormat:TXNotificationDialogActionNicknameFormat, nick, text];
 	} else {
-		nick = [self formatNickname:nick channel:target];
+		nick = [self formatNickname:nick inChannel:target];
 
 		desc = [NSString stringWithFormat:TXNotificationDialogStandardNicknameFormat, nick, text];
 	}
@@ -2817,9 +2815,9 @@ NSString * const IRCClientChannelListWasModifiedNotification = @"IRCClientChanne
 
 				LogToConsole(@"%@", TXTLS(@"IRC[1093]"));
 			} else if ([uncutInput isEqualIgnoringCase:@"devmode on"]) {
-				[RZUserDefaults() setBool:YES forKey:TXDeveloperEnvironmentToken];
+				[TPCPreferences setDeveloperModeEnabled:YES];
 			} else if ([uncutInput isEqualIgnoringCase:@"devmode off"]) {
-				[RZUserDefaults() setBool:NO forKey:TXDeveloperEnvironmentToken];
+				[TPCPreferences setDeveloperModeEnabled:NO];
 			} else {
 				[self printDebugInformation:uncutInput];
 			}
@@ -3069,86 +3067,106 @@ NSString * const IRCClientChannelListWasModifiedNotification = @"IRCClientChanne
 		case 5023: // Command: GLINE
 		case 5025: // Command: GZLINE
 		{
+			BOOL appendReason = [TPCPreferences appendReasonToCommonIRCopCommands];
+
+			if (appendReason == NO) {
+				[self send:uppercaseCommand, [s string], nil];
+
+				return;
+			}
+
 			NSString *nickname = [s getTokenAsString];
 
 			if (NSObjectIsEmpty(nickname)) {
 				[self send:uppercaseCommand, [s string], nil];
-			} else {
-				if ([nickname hasPrefix:@"-"]) {
-					[self send:uppercaseCommand, nickname, [s string], nil];
-				} else {
-					NSString *gltime = [s getTokenAsString];
-					NSString *reason = [s trimmedString];
 
-					if (NSObjectIsEmpty(reason)) {
-						reason = [TPCPreferences IRCopDefaultGlineMessage];
+				return;
+			} else if ([nickname hasPrefix:@"-"]) {
+				[self send:uppercaseCommand, nickname, [s string], nil];
 
-						/* Remove the time from our default reason. */
-						NSInteger spacePos = [reason stringPosition:NSStringWhitespacePlaceholder];
+				return;
+			}
 
-						if (spacePos > 0) {
-							if (NSObjectIsEmpty(gltime)) {
-								gltime = [reason substringToIndex:spacePos];
-							}
+			NSString *gltime = [s getTokenAsString];
+			NSString *reason = [s trimmedString];
 
-							reason = [reason substringAfterIndex:spacePos];
-						}
+			if (NSObjectIsEmpty(reason)) {
+				reason = [TPCPreferences IRCopDefaultGlineMessage];
+
+				/* Remove the time from our default reason. */
+				NSInteger spacePos = [reason stringPosition:NSStringWhitespacePlaceholder];
+
+				if (spacePos > 0) {
+					if (NSObjectIsEmpty(gltime)) {
+						gltime = [reason substringToIndex:spacePos];
 					}
 
-					[self send:uppercaseCommand, nickname, gltime, reason, nil];
+					reason = [reason substringAfterIndex:spacePos];
 				}
 			}
+
+			[self send:uppercaseCommand, nickname, gltime, reason, nil];
 
 			break;
 		}
 		case 5063:  // Command: SHUN
 		case 5068: // Command: TEMPSHUN
 		{
+			BOOL appendReason = [TPCPreferences appendReasonToCommonIRCopCommands];
+
+			if (appendReason == NO) {
+				[self send:uppercaseCommand, [s string], nil];
+
+				return;
+			}
+
 			NSString *nickname = [s getTokenAsString];
 
 			if (NSObjectIsEmpty(nickname)) {
 				[self send:uppercaseCommand, [s string], nil];
-			} else {
-				if ([nickname hasPrefix:@"-"]) {
-					[self send:uppercaseCommand, nickname, [s string], nil];
-				} else {
-					if ([uppercaseCommand isEqualToString:IRCPublicCommandIndex("tempshun")]) {
-						NSString *reason = [s trimmedString];
 
-						if (NSObjectIsEmpty(reason)) {
-							reason = [TPCPreferences IRCopDefaultShunMessage];
+				return;
+			} else if ([nickname hasPrefix:@"-"]) {
+				[self send:uppercaseCommand, nickname, [s string], nil];
 
-							/* Remove the time from our default reason. */
-							NSInteger spacePos = [reason stringPosition:NSStringWhitespacePlaceholder];
+				return;
+			}
 
-							if (spacePos > 0) {
-								reason = [reason substringAfterIndex:spacePos];
-							}
-						}
+			if ([uppercaseCommand isEqualToString:IRCPublicCommandIndex("tempshun")]) {
+				NSString *reason = [s trimmedString];
 
-						[self send:uppercaseCommand, nickname, reason, nil];
-					} else {
-						NSString *shtime = [s getTokenAsString];
-						NSString *reason = [s trimmedString];
+				if (NSObjectIsEmpty(reason)) {
+					reason = [TPCPreferences IRCopDefaultShunMessage];
 
-						if (NSObjectIsEmpty(reason)) {
-							reason = [TPCPreferences IRCopDefaultShunMessage];
+					/* Remove the time from our default reason. */
+					NSInteger spacePos = [reason stringPosition:NSStringWhitespacePlaceholder];
 
-							/* Remove the time from our default reason. */
-							NSInteger spacePos = [reason stringPosition:NSStringWhitespacePlaceholder];
-
-							if (spacePos > 0) {
-								if (NSObjectIsEmpty(shtime)) {
-									shtime = [reason substringToIndex:spacePos];
-								}
-
-								reason = [reason substringAfterIndex:spacePos];
-							}
-						}
-
-						[self send:uppercaseCommand, nickname, shtime, reason, nil];
+					if (spacePos > 0) {
+						reason = [reason substringAfterIndex:spacePos];
 					}
 				}
+
+				[self send:uppercaseCommand, nickname, reason, nil];
+			} else {
+				NSString *shtime = [s getTokenAsString];
+				NSString *reason = [s trimmedString];
+
+				if (NSObjectIsEmpty(reason)) {
+					reason = [TPCPreferences IRCopDefaultShunMessage];
+
+					/* Remove the time from our default reason. */
+					NSInteger spacePos = [reason stringPosition:NSStringWhitespacePlaceholder];
+
+					if (spacePos > 0) {
+						if (NSObjectIsEmpty(shtime)) {
+							shtime = [reason substringToIndex:spacePos];
+						}
+
+						reason = [reason substringAfterIndex:spacePos];
+					}
+				}
+
+				[self send:uppercaseCommand, nickname, shtime, reason, nil];
 			}
 
 			break;
@@ -3521,43 +3539,36 @@ NSString * const IRCClientChannelListWasModifiedNotification = @"IRCClientChanne
 #pragma mark -
 #pragma mark Print
 
-- (NSString *)formatNickname:(NSString *)nick channel:(IRCChannel *)channel
+- (NSString *)formatNickname:(NSString *)nickname inChannel:(IRCChannel *)channel
 {
-	return [self formatNickname:nick channel:channel formatOverride:nil];
+	return [self formatNickname:nickname inChannel:channel withFormat:nil];
 }
 
-- (NSString *)formatNickname:(NSString *)nick channel:(IRCChannel *)channel formatOverride:(NSString *)forcedFormat
+- (NSString *)formatNickname:(NSString *)nickname inChannel:(IRCChannel *)channel withFormat:(NSString *)format
 {
 	/* Validate input. */
-	NSObjectIsEmptyAssertReturn(nick, nil);
+	NSObjectIsEmptyAssertReturn(nickname, nil);
 
 	PointerIsEmptyAssertReturn(channel, nil);
 
 	/* Define default formats. */
-	NSString *nmformat = [TPCPreferences themeNicknameFormat];
-
-	NSString *override = [themeSettings() nicknameFormat];
-
-	/* Use theme based format? */
-	if (NSObjectIsNotEmpty(override)) {
-		nmformat = override;
+	if (NSObjectIsEmpty(format)) {
+		format = [themeSettings() themeNicknameFormat];
 	}
 
-	/* Use default format? */
-	if (NSObjectIsEmpty(nmformat)) {
-		nmformat = TVCLogLineUndefinedNicknameFormat;
+	if (NSObjectIsEmpty(format)) {
+		format = [TPCPreferences themeNicknameFormat];
 	}
 
-	/* Use a forced format? */
-	if (NSObjectIsNotEmpty(forcedFormat)) {
-		nmformat = forcedFormat;
+	if (NSObjectIsEmpty(format)) {
+		format = [TPCPreferences themeNicknameFormatDefault];
 	}
 
 	/* Find mark character. */
 	NSString *mark = NSStringEmptyPlaceholder;
 
-	if (channel && [channel isChannel]) {
-		IRCUser *m = [channel findMember:nick];
+	if ([channel isChannel]) {
+		IRCUser *m = [channel findMember:nickname];
 
 		if (m) {
 			NSString *_mark = [m mark];
@@ -3573,7 +3584,7 @@ NSString * const IRCClientChannelListWasModifiedNotification = @"IRCClientChanne
 	
 	NSString *chunk = nil;
 
-	NSScanner *scanner = [NSScanner scannerWithString:nmformat];
+	NSScanner *scanner = [NSScanner scannerWithString:format];
 
 	[scanner setCharactersToBeSkipped:nil];
 
@@ -3602,7 +3613,7 @@ NSString * const IRCClientChannelListWasModifiedNotification = @"IRCClientChanne
 		if ([scanner scanString:@"@" intoString:nil] == YES) {
 			oValue = mark; // User mode mark.
 		} else if ([scanner scanString:@"n" intoString:nil] == YES) {
-			oValue = nick; // Actual nickname.
+			oValue = nickname; // Actual nickname.
 		} else if ([scanner scanString:formatMarker intoString:nil] == YES) {
 			oValue = formatMarker; // Format marker.
 		}
@@ -3624,7 +3635,7 @@ NSString * const IRCClientChannelListWasModifiedNotification = @"IRCClientChanne
 	return [NSString stringWithString:buffer];
 }
 
-- (void)printAndLog:(TVCLogLine *)line completionBlock:(IRCClientPrintToWebViewCallbackBlock)completionBlock
+- (void)printAndLog:(TVCLogLine *)line completionBlock:(IRCClientPrintToWebViewCompletionBlock)completionBlock
 {
 	[self.viewController print:line completionBlock:completionBlock];
 	
@@ -4880,7 +4891,9 @@ NSString * const IRCClientChannelListWasModifiedNotification = @"IRCClientChanne
 	NSObjectIsEmptyAssert(command);
 
 	if ([TPCPreferences replyToCTCPRequests] == NO) {
-		return [self printDebugInformationToConsole:TXTLS(@"IRC[1032]", command, sendern)];
+		[self printDebugInformationToConsole:TXTLS(@"IRC[1032]", command, sendern)];
+
+		return;
 	}
 
 	if ([command isEqualToString:IRCPrivateCommandIndex("dcc")]) {
@@ -6471,7 +6484,9 @@ NSString * const IRCClientChannelListWasModifiedNotification = @"IRCClientChanne
 	NSInteger n = [m commandNumeric];
 
 	if (400 <= n && n < 600 && (n == 403) == NO && (n == 422) == NO) {
-		return [self receiveErrorNumericReply:m];
+		[self receiveErrorNumericReply:m];
+
+		return;
 	}
 
 	BOOL printMessage = YES;
@@ -7960,21 +7975,96 @@ NSString * const IRCClientChannelListWasModifiedNotification = @"IRCClientChanne
 		NSMutableArray *ary = [NSMutableArray array];
 		
 		for (IRCChannel *c in self.channels) {
-			if ([c isChannel]) {
-				if ([c isActive] == NO) {
-					if (c.config.autoJoin) {
-						[ary addObject:c];
-					}
+			if ([c isChannel] && [c isActive] == NO) {
+				if (c.config.autoJoin) {
+					[ary addObject:c];
 				}
 			}
 		}
-		
-		[self quickJoin:ary];
+
+		[self joinAutoJoinChannels:ary withKeys:NO];
+		[self joinAutoJoinChannels:ary withKeys:YES];
 		
 		/* Update status later. */
 		[self cancelPerformRequestsWithSelector:@selector(autojoinInProgress) object:nil]; // User might invoke -performAutojoin while timer is active
 
 		[self performSelector:@selector(updateAutoJoinStatus) withObject:nil afterDelay:25.0];
+	}
+}
+
+
+- (void)joinAutoJoinChannels:(NSArray *)channels withKeys:(BOOL)passKeys
+{
+	NSMutableString *channelList = [NSMutableString string];
+	NSMutableString *passwordList = [NSMutableString string];
+
+	NSInteger channelCount = 0;
+
+	for (IRCChannel *c in channels) {
+		if ([c status] != IRCChannelStatusParted) {
+			LogToConsole(@"Refusing to join %@ because of status: %ld", [c name], [c status]);
+
+			continue;
+		}
+
+		NSMutableString *previousChannelList = [channelList mutableCopy];
+		NSMutableString *previousPasswordList = [passwordList mutableCopy];
+
+		BOOL channelListEmpty = NSObjectIsEmpty(channelList);
+		BOOL passwordListEmpty = NSObjectIsEmpty(passwordList);
+
+		NSString *secretKey = [c secretKey];
+
+		if (NSObjectIsNotEmpty(secretKey)) {
+			if (passKeys == NO) {
+				continue;
+			}
+
+			if ( passwordListEmpty == NO) {
+				[passwordList appendString:@","];
+			}
+
+			[passwordList appendString:secretKey];
+		} else {
+			if (passKeys) {
+				continue;
+			}
+		}
+
+		if ( channelListEmpty == NO) {
+			[channelList appendString:@","];
+		}
+
+		[channelList appendString:[c name]];
+
+		[c setStatus:IRCChannelStatusJoining];
+
+		if (channelCount > [TPCPreferences autojoinMaxChannelJoins]) {
+			/* Send previous lists. */
+			if (NSObjectIsEmpty(previousPasswordList)) {
+				[self send:IRCPrivateCommandIndex("join"), previousChannelList, nil];
+			} else {
+				[self send:IRCPrivateCommandIndex("join"), previousChannelList, previousPasswordList, nil];
+			}
+
+			[channelList setString:[c name]];
+
+			if (NSObjectIsNotEmpty(secretKey)) {
+				[passwordList setString:secretKey];
+			}
+
+			channelCount = 1; // To match setString: statements up above.
+		} else {
+			channelCount += 1;
+		}
+	}
+
+	if (NSObjectIsNotEmpty(channelList)) {
+		if (NSObjectIsEmpty(passwordList)) {
+			[self send:IRCPrivateCommandIndex("join"), channelList, nil];
+		} else {
+			[self send:IRCPrivateCommandIndex("join"), channelList, passwordList, nil];
+		}
 	}
 }
 
@@ -8030,7 +8120,9 @@ NSString * const IRCClientChannelListWasModifiedNotification = @"IRCClientChanne
 - (void)onPongTimer:(id)sender
 {
 	if (self.isLoggedIn == NO) {
-		return [self stopPongTimer];
+		[self stopPongTimer];
+
+		return;
 	}
 
 	/* Instead of stopping and starting the timer every time this changes, it
@@ -8735,85 +8827,6 @@ NSString * const IRCClientChannelListWasModifiedNotification = @"IRCClientChanne
 	NSAssertReturn(self.isLoggedIn);
 
 	[self send:IRCPrivateCommandIndex("kick"), [channel name], nick, [TPCPreferences defaultKickMessage], nil];
-}
-
-- (void)quickJoin:(NSArray *)chans withKeys:(BOOL)passKeys
-{
-	NSAssertReturn(self.isLoggedIn);
-
-	NSMutableString *channelList = [NSMutableString string];
-	NSMutableString *passwordList = [NSMutableString string];
-
-	NSInteger channelCount = 0;
-
-	for (IRCChannel *c in chans) {
-		if ([c status] == IRCChannelStatusParted) {
-			NSMutableString *previousChannelList = [channelList mutableCopy];
-			NSMutableString *previousPasswordList = [passwordList mutableCopy];
-			
-			BOOL channelListEmpty = NSObjectIsEmpty(channelList);
-			BOOL passwordListEmpty = NSObjectIsEmpty(passwordList);
-			
-			NSString *secretKey = [c secretKey];
-
-			if (NSObjectIsNotEmpty(secretKey)) {
-				if (passKeys == NO) {
-					continue;
-				}
-				
-				if ( passwordListEmpty == NO) {
-					[passwordList appendString:@","];
-				}
-
-				[passwordList appendString:secretKey];
-			} else {
-				if (passKeys) {
-					continue;
-				}
-			}
-
-			if ( channelListEmpty == NO) {
-				[channelList appendString:@","];
-			}
-
-			[channelList appendString:[c name]];
-			
-			[c setStatus:IRCChannelStatusJoining];
-
-			if (channelCount > [TPCPreferences autojoinMaxChannelJoins]) {
-				/* Send previous lists. */
-				if (NSObjectIsEmpty(previousPasswordList)) {
-					[self send:IRCPrivateCommandIndex("join"), previousChannelList, nil];
-				} else {
-					[self send:IRCPrivateCommandIndex("join"), previousChannelList, previousPasswordList, nil];
-				}
-
-				[channelList setString:[c name]];
-
-				if (NSObjectIsNotEmpty(secretKey)) {
-					[passwordList setString:secretKey];
-				}
-
-				channelCount = 1; // To match setString: statements up above.
-			} else {
-				channelCount += 1;
-			}
-		}
-	}
-
-	if (NSObjectIsNotEmpty(channelList)) {
-		if (NSObjectIsEmpty(passwordList)) {
-			[self send:IRCPrivateCommandIndex("join"), channelList, nil];
-		} else {
-			[self send:IRCPrivateCommandIndex("join"), channelList, passwordList, nil];
-		}
-	}
-}
-
-- (void)quickJoin:(NSArray *)chans
-{
-	[self quickJoin:chans withKeys:NO];
-	[self quickJoin:chans withKeys:YES];
 }
 
 - (void)toggleAwayStatus:(BOOL)setAway

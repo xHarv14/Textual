@@ -150,7 +150,7 @@ NSString * const TPCThemeControllerThemeListDidChangeNotification		= @"TPCThemeC
 	return [TPCThemeController pathOfThemeWithName:themeName storageLocation:NULL];
 }
 
-+ (NSString *)pathOfThemeWithName:(NSString *)themeName storageLocation:(TPCThemeControllerStorageLocation *)storageLocation;
++ (NSString *)pathOfThemeWithName:(NSString *)themeName storageLocation:(TPCThemeControllerStorageLocation *)storageLocation
 {
 	if ( storageLocation) { // Reset value of pointer
 		*storageLocation = TPCThemeControllerStorageUnknownLocation;
@@ -361,7 +361,7 @@ NSString * const TPCThemeControllerThemeListDidChangeNotification		= @"TPCThemeC
 
 	if ([NSFont fontIsAvailable:fontName] == NO) {
 		if ( suggestedFontName) {
-			*suggestedFontName = TXDefaultTextualChannelViewFont;
+			*suggestedFontName = [TPCPreferences themeChannelViewFontNameDefault];
 		}
 		
 		keyChanged = YES;
@@ -380,7 +380,7 @@ NSString * const TPCThemeControllerThemeListDidChangeNotification		= @"TPCThemeC
 		 nothing except try to recover by using the default one. */
 		if ([TPCThemeController themeExists:validatedTheme] == NO) {
 			if ( suggestedThemeName) {
-				*suggestedThemeName = TXDefaultTextualChannelViewTheme;
+				*suggestedThemeName = [TPCPreferences themeNameDefault];
 				
 				keyChanged = YES;
 			}
@@ -414,7 +414,7 @@ NSString * const TPCThemeControllerThemeListDidChangeNotification		= @"TPCThemeC
 				} else {
 					/* Revert back to the default theme if no recovery is possible. */
 					if ( suggestedThemeName) {
-						*suggestedThemeName = TXDefaultTextualChannelViewTheme;
+						*suggestedThemeName = [TPCPreferences themeNameDefault];
 						
 						keyChanged = YES;
 					}
@@ -448,7 +448,7 @@ NSString * const TPCThemeControllerThemeListDidChangeNotification		= @"TPCThemeC
 			} else {
 				/* Revert back to the default theme if no recovery is possible. */
 				if ( suggestedThemeName) {
-					*suggestedThemeName = TXDefaultTextualChannelViewTheme;
+					*suggestedThemeName = [TPCPreferences themeNameDefault];
 					
 					keyChanged = YES;
 				}
